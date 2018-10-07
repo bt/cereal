@@ -1,0 +1,20 @@
+# Vendor files
+vendor/*/
+
+# VIM swap files
+*.swp
+*.swo
+
+# OS-dependent
+.DS_Store
+*~
+
+# IntelliJ
+*.iml
+/.idea
+
+# Coverage profiles
+*.coverprofile
+profile.out
+coverage.txt
+cover.out
