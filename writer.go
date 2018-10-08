@@ -2,6 +2,7 @@ package cereal
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -19,25 +20,48 @@ func NewWriter(w io.Writer) *writer {
 	return &writer{w: bufio.NewWriter(w)}
 }
 
+// NewBufferFromBuffer will return a new writer from a specified byte buffer.
+func NewWriterFromBuffer(buf []byte) *writer {
+	return &writer{w: bufio.NewWriter(bytes.NewBuffer(buf))}
+}
+
 func (w *writer) Write(data interface{}) (offset uint64, err error) {
 	switch vv := data.(type) {
 	case uint, uint8, uint32, uint64:
-		return w.writeUint(uint64Value(vv))
+		offset, err = w.writeUint(uint64Value(vv))
 	case int, int8, int32, int64:
-		return w.writeInt(int64Value(vv))
+		offset, err = w.writeInt(int64Value(vv))
 	case float32, float64:
-		return w.writeFloat(floatValue(vv))
+		offset, err = w.writeFloat(floatValue(vv))
 	case []byte:
-		return w.writeBytes(vv)
+		offset, err = w.writeBytes(vv)
 	case string:
-		return w.writeString(vv)
+		offset, err = w.writeString(vv)
 	case []string:
-		return w.writeStringSlice(vv)
+		offset, err = w.writeStringSlice(vv)
 	case bool:
-		return w.writeBoolean(vv)
+		offset, err = w.writeBoolean(vv)
 	default:
 		panic(fmt.Errorf("cannot write value, unknown data type for value: '%v' (type: %s)", vv, reflect.TypeOf(vv).String()))
 	}
+
+	if err != nil {
+		return 0, err
+	}
+	err = w.w.Flush()
+	return offset, err
+}
+
+// WriteRaw will write the raw bytes into the writer.
+func (w *writer) WriteRaw(buf []byte) (offset uint64, err error) {
+	defer w.w.Flush()
+	currentOffset := w.currentOffset
+
+	var nn int
+	nn, err = w.w.Write(buf)
+
+	w.currentOffset += uint64(nn)
+	return currentOffset, err
 }
 
 func (w *writer) writeUint(v uint64) (offset uint64, err error) {
@@ -149,6 +173,9 @@ func (w *writer) writeStringSlice(s []string) (offset uint64, err error) {
 	w.currentOffset++
 
 	// Write length of strings
+	if len(w.reusableBuf) < binary.MaxVarintLen64 {
+		w.reusableBuf = make([]byte, binary.MaxVarintLen64)
+	}
 	size := binary.PutUvarint(w.reusableBuf, uint64(len(s)))
 	if _, err = w.w.Write(w.reusableBuf[0:size]); err != nil {
 		return 0, err

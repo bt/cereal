@@ -1,9 +1,14 @@
 package cereal
 
-type dataType int
+type DataType int
+
+func (d DataType) String() string {
+	return dataTypeStrings[d]
+}
 
 const (
-	Boolean dataType = iota
+	Any DataType = iota
+	Boolean
 	Integer
 	UnsignedInteger
 	Float
@@ -11,3 +16,14 @@ const (
 	String
 	StringSlice
 )
+
+var dataTypeStrings = map[DataType]string{
+	Any:             "any",
+	Boolean:         "bool",
+	Integer:         "int",
+	UnsignedInteger: "uint",
+	Float:           "float",
+	Bytes:           "bytes",
+	String:          "string",
+	StringSlice:     "strings",
+}
