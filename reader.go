@@ -48,29 +48,29 @@ func (b *byteSeeker) Seek(offset int64, whence int) (int64, error) {
 	return b.offset, nil
 }
 
-type reader struct {
+type Reader struct {
 	r io.ReadSeeker
 }
 
-func NewReader(r io.ReadSeeker) *reader {
-	return &reader{r: r}
+func NewReader(r io.ReadSeeker) *Reader {
+	return &Reader{r: r}
 }
 
-func NewReaderFromBuffer(buf []byte) *reader {
-	return &reader{r: &byteSeeker{buf: buf}}
+func NewReaderFromBuffer(buf []byte) *Reader {
+	return &Reader{r: &byteSeeker{buf: buf}}
 }
 
-func (r *reader) readByte() (byte, error) {
+func (r *Reader) readByte() (byte, error) {
 	b := make([]byte, 1)
 	_, err := r.r.Read(b)
 	return b[0], err
 }
 
-func (r *reader) readInt() (int64, error) {
+func (r *Reader) readInt() (int64, DataType, error) {
 	b := make([]byte, binary.MaxVarintLen64)
 	n, err := r.r.Read(b)
 	if err != nil {
-		return 0, err
+		return 0, Integer, err
 	}
 
 	val, nn := binary.Varint(b)
@@ -79,21 +79,21 @@ func (r *reader) readInt() (int64, error) {
 		if rewindBytes > 0 {
 			_, err = r.r.Seek(-int64(rewindBytes), io.SeekCurrent)
 		}
-		return val, err
+		return val, Integer, err
 	}
 
 	if nn == 0 {
-		return 0, fmt.Errorf("buf too small")
+		return 0, Integer, fmt.Errorf("buf too small")
 	} else {
-		return 0, fmt.Errorf("overflow")
+		return 0, Integer, fmt.Errorf("overflow")
 	}
 }
 
-func (r *reader) readUint() (uint64, error) {
+func (r *Reader) readUint() (uint64, DataType, error) {
 	b := make([]byte, binary.MaxVarintLen64)
 	n, err := r.r.Read(b)
 	if err != nil {
-		return 0, err
+		return 0, UnsignedInteger, err
 	}
 
 	val, nn := binary.Uvarint(b)
@@ -102,25 +102,25 @@ func (r *reader) readUint() (uint64, error) {
 		if rewindBytes > 0 {
 			_, err = r.r.Seek(-int64(rewindBytes), io.SeekCurrent)
 		}
-		return val, err
+		return val, UnsignedInteger, err
 	}
 
 	if nn == 0 {
-		return 0, fmt.Errorf("buf too small")
+		return 0, UnsignedInteger, fmt.Errorf("buf too small")
 	} else {
-		return 0, fmt.Errorf("overflow")
+		return 0, UnsignedInteger, fmt.Errorf("overflow")
 	}
 }
 
 // Read will read the next value out of the buffer.
-func (r *reader) Read(expectedType DataType) (interface{}, error) {
+func (r *Reader) Read(expectedType DataType) (interface{}, DataType, error) {
 	t, err := r.readByte()
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	if expectedType != Any && DataType(t) != expectedType {
-		return nil, fmt.Errorf("expected data type mismatch: wanted '%s', got '%s'", expectedType, DataType(t))
+		return nil, 0, fmt.Errorf("expected data type mismatch: wanted '%s', got '%s'", expectedType, DataType(t))
 	}
 
 	switch DataType(t) {
@@ -134,6 +134,6 @@ func (r *reader) Read(expectedType DataType) (interface{}, error) {
 }
 
 // ReadRaw reads data into out and returns the number of bytes read into out.
-func (r *reader) ReadRaw(out []byte) (n int, err error) {
+func (r *Reader) ReadRaw(out []byte) (n int, err error) {
 	return r.r.Read(out)
 }

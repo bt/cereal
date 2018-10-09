@@ -8,24 +8,23 @@ import (
 )
 
 func TestWriter_Simple(t *testing.T) {
-	buf := new(bytes.Buffer)
+	buf := make([]byte, 1024)
+	writer := NewWriterFromBuffer(bytes.NewBuffer(buf))
 
-	writer := NewWriter(buf)
-
-	offset, err := writer.Write("abc")
+	offset, _, err := writer.Write("abc")
 	assert.NilError(t, err)
 	assert.Equal(t, offset, uint64(0))
-	assert.DeepEqual(t, buf.Bytes(), []byte{0x06, 0x03, 0x61, 0x62, 0x63})
+	assert.DeepEqual(t, buf, []byte{0x06, 0x03, 0x61, 0x62, 0x63})
 
-	offset, err = writer.Write("abc")
+	offset, _, err = writer.Write("abc")
 	assert.NilError(t, err)
 	assert.Equal(t, offset, uint64(5))
-	assert.DeepEqual(t, buf.Bytes(), []byte{0x06, 0x03, 0x61, 0x62, 0x63, 0x06, 0x03, 0x61, 0x62, 0x63})
+	assert.DeepEqual(t, buf, []byte{0x06, 0x03, 0x61, 0x62, 0x63, 0x06, 0x03, 0x61, 0x62, 0x63})
 
 	offset, err = writer.WriteRaw([]byte{0xFE, 0xED, 0xFA, 0xCE})
 	assert.NilError(t, err)
 	assert.Equal(t, offset, uint64(10))
-	assert.DeepEqual(t, buf.Bytes(), []byte{0x06, 0x03, 0x61, 0x62, 0x63, 0x06, 0x03, 0x61, 0x62, 0x63, 0xFE, 0xED, 0xFA, 0xCE})
+	assert.DeepEqual(t, buf, []byte{0x06, 0x03, 0x61, 0x62, 0x63, 0x06, 0x03, 0x61, 0x62, 0x63, 0xFE, 0xED, 0xFA, 0xCE})
 }
 
 func TestWriter_Write(t *testing.T) {
@@ -97,18 +96,18 @@ func TestWriter_Write(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			buf := new(bytes.Buffer)
-			writer := NewWriter(buf)
+			buf := make([]byte, 1024)
+			writer := NewWriterFromBuffer(bytes.NewBuffer(buf))
 
 			var offset uint64
 			var err error
 			for i, d := range test.data {
-				offset, err = writer.Write(d)
+				offset, _, err = writer.Write(d)
 				assert.NilError(t, err)
 				assert.Equal(t, offset, test.expected.offsets[i])
 			}
 
-			assert.DeepEqual(t, buf.Bytes(), test.expected.bytes)
+			assert.DeepEqual(t, buf, test.expected.bytes)
 		})
 	}
 }
