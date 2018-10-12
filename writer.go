@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"reflect"
+
+	"github.com/pierrec/lz4"
 )
 
 type Writer struct {
@@ -77,6 +79,18 @@ func (w *Writer) WriteRaw(buf []byte) (offset uint64, err error) {
 
 	w.currentOffset += uint64(nn)
 	return currentOffset, err
+}
+
+// WriteRawToCompress will write raw bytes to compress into LZ4, then to the writer.
+func (w *Writer) WriteRawToLZ4Compress(buf []byte) (offset uint64, length int, err error) {
+	zbuf := new(bytes.Buffer)
+	zw := lz4.NewWriter(zbuf)
+	_, err = zw.Write(buf)
+	if err != nil {
+		return 0, 0, err
+	}
+	offset, err = w.WriteRaw(zbuf.Bytes())
+	return offset, zbuf.Len(), err
 }
 
 // WriteRawByte will write a single byte into the writer.
