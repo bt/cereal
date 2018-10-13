@@ -83,14 +83,31 @@ func (w *Writer) WriteRaw(buf []byte) (offset uint64, err error) {
 
 // WriteRawToCompress will write raw bytes to compress into LZ4, then to the writer.
 func (w *Writer) WriteRawToLZ4Compress(buf []byte) (offset uint64, length int, err error) {
-	zbuf := new(bytes.Buffer)
-	zw := lz4.NewWriter(zbuf)
-	_, err = zw.Write(buf)
-	if err != nil {
-		return 0, 0, err
+	var ht [1 << 16]int
+	currentOffset := w.currentOffset
+
+	// 64 KB blocks
+	zbuf := make([]byte, 64<<10)
+	chunkData := make([]byte, 64<<10)
+
+	r := bytes.NewReader(buf)
+	for {
+		// Read chunk
+		n, err := r.Read(chunkData)
+		if err != nil && err != io.EOF {
+			return 0, 0, err
+		}
+		if n == 0 {
+			break
+		}
+
+		compSize, err := lz4.CompressBlock(chunkData, zbuf, ht[:])
+		if _, err = w.WriteRaw(zbuf[0:compSize]); err != nil {
+			return 0, 0, err
+		}
 	}
-	offset, err = w.WriteRaw(zbuf.Bytes())
-	return offset, zbuf.Len(), err
+
+	return offset, int(w.currentOffset - currentOffset), nil
 }
 
 // WriteRawByte will write a single byte into the writer.
