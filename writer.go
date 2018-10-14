@@ -1,10 +1,10 @@
 package cereal
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"os"
 	"reflect"
@@ -12,21 +12,37 @@ import (
 	"github.com/pierrec/lz4"
 )
 
+var (
+	// LZ4 properties
+	hashTable    [64 << 10]int
+	lz4BlockSize = 64 << 10
+)
+
 type Writer struct {
-	w             *bufio.Writer
-	file          *os.File
-	currentOffset uint64
-	reusableBuf   []byte
+	w           *HashWriter
+	checksum    uint32
+	file        *os.File
+	reusableBuf []byte
 }
 
 // NewWriter will return a new writer.
 func NewWriter(f *os.File) *Writer {
-	return &Writer{w: bufio.NewWriter(f), file: f}
+	return &Writer{
+		w:    NewHashWriter(f),
+		file: f,
+	}
 }
 
 // NewBufferFromBuffer will return a new writer from a specified byte buffer.
 func NewWriterFromBuffer(buf *bytes.Buffer) *Writer {
-	return &Writer{w: bufio.NewWriter(buf)}
+	return &Writer{
+		w: NewHashWriter(buf),
+	}
+}
+
+// Offset returns the current writer offset.
+func (w *Writer) Offset() uint64 {
+	return w.w.Count()
 }
 
 func (w *Writer) SeekOffset(offset uint64) error {
@@ -34,12 +50,11 @@ func (w *Writer) SeekOffset(offset uint64) error {
 		_, err := w.file.Seek(int64(offset), io.SeekStart)
 		return err
 	}
-	w.currentOffset = offset
 	return nil
 }
 
-func (w *Writer) Write(data interface{}) (offset uint64, length uint64, err error) {
-	currentOffset := w.currentOffset
+func (w *Writer) Write(data interface{}) (offset uint64, length int, err error) {
+	offset = w.w.Count()
 
 	switch vv := data.(type) {
 	case uint, uint8, uint32, uint64:
@@ -63,32 +78,22 @@ func (w *Writer) Write(data interface{}) (offset uint64, length uint64, err erro
 	if err != nil {
 		return 0, 0, err
 	}
-	err = w.w.Flush()
-
-	length = w.currentOffset - currentOffset
+	length = int(w.w.Count() - offset)
 	return offset, length, err
 }
 
 // WriteRaw will write the raw bytes into the writer.
 func (w *Writer) WriteRaw(buf []byte) (offset uint64, err error) {
-	defer w.w.Flush()
-	currentOffset := w.currentOffset
-
-	var nn int
-	nn, err = w.w.Write(buf)
-
-	w.currentOffset += uint64(nn)
-	return currentOffset, err
+	offset = w.w.Count()
+	_, err = w.w.Write(buf)
+	return offset, err
 }
 
 // WriteRawToCompress will write raw bytes to compress into LZ4, then to the writer.
 func (w *Writer) WriteRawToLZ4Compress(buf []byte) (offset uint64, length int, err error) {
-	var ht [1 << 16]int
-	currentOffset := w.currentOffset
-
-	// 64 KB blocks
-	zbuf := make([]byte, 64<<10)
-	chunkData := make([]byte, 64<<10)
+	currentOffset := w.w.Count()
+	zbuf := make([]byte, lz4BlockSize)
+	chunkData := make([]byte, lz4BlockSize)
 
 	r := bytes.NewReader(buf)
 	for {
@@ -101,21 +106,20 @@ func (w *Writer) WriteRawToLZ4Compress(buf []byte) (offset uint64, length int, e
 			break
 		}
 
-		compSize, err := lz4.CompressBlock(chunkData, zbuf, ht[:])
+		compSize, err := lz4.CompressBlock(chunkData, zbuf, hashTable[:])
 		if _, err = w.WriteRaw(zbuf[0:compSize]); err != nil {
 			return 0, 0, err
 		}
 	}
 
-	return offset, int(w.currentOffset - currentOffset), nil
+	return currentOffset, int(w.w.Count() - currentOffset), nil
 }
 
 // WriteRawByte will write a single byte into the writer.
 func (w *Writer) WriteRawByte(b byte) (offset uint64, err error) {
-	defer w.w.Flush()
-	currentOffset := w.currentOffset
+	currentOffset := w.w.Count()
 	err = w.w.WriteByte(b)
-	w.currentOffset++
+	w.checksum = crc32.Update(w.checksum, crc32.IEEETable, []byte{b})
 	return currentOffset, err
 }
 
@@ -124,21 +128,19 @@ func (w *Writer) writeUint(v uint64) (offset uint64, err error) {
 		w.reusableBuf = make([]byte, binary.MaxVarintLen64)
 	}
 	size := binary.PutUvarint(w.reusableBuf, v)
-	startOffset := w.currentOffset
+	offset = w.w.Count()
 
 	// Write type
 	if err = w.w.WriteByte(byte(UnsignedInteger)); err != nil {
 		return 0, err
 	}
-	w.currentOffset++
 
 	// Write value
 	if _, err = w.w.Write(w.reusableBuf[0:size]); err != nil {
 		return 0, err
 	}
-	w.currentOffset += uint64(size)
 
-	return startOffset, nil
+	return offset, nil
 }
 
 func (w *Writer) writeInt(v int64) (offset uint64, err error) {
@@ -146,39 +148,35 @@ func (w *Writer) writeInt(v int64) (offset uint64, err error) {
 		w.reusableBuf = make([]byte, binary.MaxVarintLen64)
 	}
 	size := binary.PutVarint(w.reusableBuf, v)
-	startOffset := w.currentOffset
+	offset = w.w.Count()
 
 	// Write type
 	if err = w.w.WriteByte(byte(Integer)); err != nil {
 		return 0, err
 	}
-	w.currentOffset++
 
 	// Write value
 	if _, err = w.w.Write(w.reusableBuf[0:size]); err != nil {
 		return 0, err
 	}
-	w.currentOffset += uint64(size)
 
-	return startOffset, nil
+	return offset, nil
 }
 
 func (w *Writer) writeFloat(v interface{}) (offset uint64, err error) {
-	startOffset := w.currentOffset
+	offset = w.w.Count()
 
 	// Write type
 	if err = w.w.WriteByte(byte(Float)); err != nil {
 		return 0, err
 	}
-	w.currentOffset++
 
 	// Write value
 	if err = binary.Write(w.w, binary.BigEndian, v); err != nil {
 		return 0, err
 	}
-	w.currentOffset += 8
 
-	return startOffset, nil
+	return offset, nil
 }
 
 func (w *Writer) appendBytes(b []byte) (err error) {
@@ -191,41 +189,37 @@ func (w *Writer) appendBytes(b []byte) (err error) {
 	if _, err = w.w.Write(w.reusableBuf[0:size]); err != nil {
 		return err
 	}
-	w.currentOffset += uint64(size)
 
 	// Write bytes
 	if _, err := w.w.Write(b); err != nil {
 		return err
 	}
-	w.currentOffset += uint64(len(b))
 
 	return nil
 }
 
 func (w *Writer) writeString(s string) (offset uint64, err error) {
-	startOffset := w.currentOffset
+	offset = w.w.Count()
 
 	// Write type
 	if err = w.w.WriteByte(byte(String)); err != nil {
 		return 0, err
 	}
-	w.currentOffset++
 
 	// Write string
 	if err := w.appendBytes([]byte(s)); err != nil {
 		return 0, err
 	}
-	return startOffset, nil
+	return offset, nil
 }
 
 func (w *Writer) writeStringSlice(s []string) (offset uint64, err error) {
-	startOffset := w.currentOffset
+	offset = w.w.Count()
 
 	// Write type
 	if err = w.w.WriteByte(byte(StringSlice)); err != nil {
 		return 0, err
 	}
-	w.currentOffset++
 
 	// Write length of strings
 	if len(w.reusableBuf) < binary.MaxVarintLen64 {
@@ -235,7 +229,6 @@ func (w *Writer) writeStringSlice(s []string) (offset uint64, err error) {
 	if _, err = w.w.Write(w.reusableBuf[0:size]); err != nil {
 		return 0, err
 	}
-	w.currentOffset += uint64(size)
 
 	// Write strings
 	for _, ss := range s {
@@ -244,17 +237,16 @@ func (w *Writer) writeStringSlice(s []string) (offset uint64, err error) {
 		}
 	}
 
-	return startOffset, nil
+	return offset, nil
 }
 
 func (w *Writer) writeBoolean(b bool) (offset uint64, err error) {
-	startOffset := w.currentOffset
+	offset = w.w.Count()
 
 	// Write type
 	if err = w.w.WriteByte(byte(Boolean)); err != nil {
 		return 0, err
 	}
-	w.currentOffset++
 
 	// Write value
 	if b {
@@ -266,23 +258,22 @@ func (w *Writer) writeBoolean(b bool) (offset uint64, err error) {
 			return 0, err
 		}
 	}
-	return startOffset, nil
+	return offset, nil
 }
 
 func (w *Writer) writeBytes(b []byte) (offset uint64, err error) {
-	startOffset := w.currentOffset
+	offset = w.w.Count()
 
 	// Write type
 	if err = w.w.WriteByte(byte(Bytes)); err != nil {
 		return 0, err
 	}
-	w.currentOffset++
 
 	// Write bytes
 	if err := w.appendBytes(b); err != nil {
 		return 0, err
 	}
-	return startOffset, nil
+	return offset, nil
 }
 
 // Close will close the writer.

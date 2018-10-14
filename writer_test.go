@@ -82,7 +82,7 @@ func TestWriter_Write(t *testing.T) {
 			data: []interface{}{true, false},
 			expected: expected{
 				bytes:   []byte{0x01, 0x01, 0x01, 0x00},
-				offsets: []uint64{0, 1},
+				offsets: []uint64{0, 2},
 			},
 		},
 		{
@@ -90,14 +90,14 @@ func TestWriter_Write(t *testing.T) {
 			data: []interface{}{"foo", "bar", 87, true, -4, 99.11},
 			expected: expected{
 				bytes:   []byte{0x06, 0x03, 0x66, 0x6f, 0x6f, 0x06, 0x03, 0x62, 0x61, 0x72, 0x02, 0xae, 0x01, 0x01, 0x01, 0x02, 0x07, 0x04, 0x40, 0x58, 0xc7, 0x0a, 0x3d, 0x70, 0xa3, 0xd7},
-				offsets: []uint64{0, 5, 10, 13, 14, 16},
+				offsets: []uint64{0, 5, 10, 13, 15, 17},
 			},
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			buf := make([]byte, 1024)
-			writer := NewWriterFromBuffer(bytes.NewBuffer(buf))
+			buf := new(bytes.Buffer)
+			writer := NewWriterFromBuffer(buf)
 
 			var offset uint64
 			var err error
@@ -107,7 +107,7 @@ func TestWriter_Write(t *testing.T) {
 				assert.Equal(t, offset, test.expected.offsets[i])
 			}
 
-			assert.DeepEqual(t, buf, test.expected.bytes)
+			assert.DeepEqual(t, buf.Bytes(), test.expected.bytes)
 		})
 	}
 }

@@ -20,6 +20,7 @@ func TestReader_ReadRaw(t *testing.T) {
 func TestReader_Read(t *testing.T) {
 	type expected struct {
 		val       interface{}
+		dataType  DataType
 		endOffset int64
 	}
 
@@ -33,6 +34,7 @@ func TestReader_Read(t *testing.T) {
 			buf:  []byte{0x02, 0xe6, 0x83, 0x0f},
 			expected: expected{
 				val:       int64(123123),
+				dataType:  Integer,
 				endOffset: 4,
 			},
 		},
@@ -41,6 +43,7 @@ func TestReader_Read(t *testing.T) {
 			buf:  []byte{0x02, 0xe6, 0x83, 0x0f, 0x05, 0x00, 0x0f},
 			expected: expected{
 				val:       int64(123123),
+				dataType:  Integer,
 				endOffset: 4,
 			},
 		},
@@ -49,6 +52,7 @@ func TestReader_Read(t *testing.T) {
 			buf:  []byte{0x03, 0xf3, 0xc1, 0x07},
 			expected: expected{
 				val:       uint64(123123),
+				dataType:  UnsignedInteger,
 				endOffset: 4,
 			},
 		},
@@ -56,10 +60,11 @@ func TestReader_Read(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			reader := NewReaderFromBuffer(test.buf)
-			i, err := reader.Read(Any)
+			i, dataType, err := reader.Read(Any)
 
 			assert.NilError(t, err)
 			assert.Equal(t, i, test.expected.val)
+			assert.Equal(t, dataType, test.expected.dataType)
 			assert.Equal(t, reader.r.(*byteSeeker).offset, test.expected.endOffset)
 		})
 	}

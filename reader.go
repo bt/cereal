@@ -1,9 +1,13 @@
 package cereal
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
+	"os"
+
+	"github.com/pierrec/lz4"
 )
 
 type byteSeeker struct {
@@ -136,4 +140,40 @@ func (r *Reader) Read(expectedType DataType) (interface{}, DataType, error) {
 // ReadRaw reads data into out and returns the number of bytes read into out.
 func (r *Reader) ReadRaw(out []byte) (n int, err error) {
 	return r.r.Read(out)
+}
+
+// ReadCompressedBlock will read the next block and decompress it into out.
+func (r *Reader) ReadCompressedBlock(out []byte) (err error) {
+	buf := make([]byte, lz4BlockSize)
+	_, err = r.r.Read(buf)
+	if err != nil {
+		return err
+	}
+	_, err = lz4.UncompressBlock(buf, out)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// DecompressToFile will read in the entire reader buffer and decompress it to the specified file.
+func (r *Reader) DecompressToFile(filePath string) error {
+	f, err := os.Create(filePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	zr := lz4.NewReader(r.r)
+	var decomp bytes.Buffer
+	_, err = io.Copy(&decomp, zr)
+	if err != nil {
+		return err
+	}
+
+	_, err = f.Write(decomp.Bytes())
+	if err != nil {
+		return err
+	}
+	return nil
 }
