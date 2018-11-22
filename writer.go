@@ -19,10 +19,11 @@ var (
 )
 
 type Writer struct {
-	w           *HashWriter
-	checksum    uint32
-	file        *os.File
-	reusableBuf []byte
+	w                *HashWriter
+	checksum         uint32
+	file             *os.File
+	reusableBuf      []byte
+	excludeWriteType bool
 }
 
 // NewWriter will return a new writer.
@@ -43,6 +44,11 @@ func NewWriterFromBuffer(buf *bytes.Buffer) *Writer {
 // Offset returns the current writer offset.
 func (w *Writer) Offset() uint64 {
 	return w.w.Count()
+}
+
+// SetExcludeWriteType will toggle whether data type enums are written to the buffer.
+func (w *Writer) SetExcludeWriteType(b bool) {
+	w.excludeWriteType = b
 }
 
 func (w *Writer) SeekOffset(offset uint64) error {
@@ -131,8 +137,10 @@ func (w *Writer) writeUint(v uint64) (offset uint64, err error) {
 	offset = w.w.Count()
 
 	// Write type
-	if err = w.w.WriteByte(byte(UnsignedInteger)); err != nil {
-		return 0, err
+	if !w.excludeWriteType {
+		if err = w.w.WriteByte(byte(UnsignedInteger)); err != nil {
+			return 0, err
+		}
 	}
 
 	// Write value
@@ -151,8 +159,10 @@ func (w *Writer) writeInt(v int64) (offset uint64, err error) {
 	offset = w.w.Count()
 
 	// Write type
-	if err = w.w.WriteByte(byte(Integer)); err != nil {
-		return 0, err
+	if !w.excludeWriteType {
+		if err = w.w.WriteByte(byte(Integer)); err != nil {
+			return 0, err
+		}
 	}
 
 	// Write value
@@ -167,8 +177,10 @@ func (w *Writer) writeFloat(v interface{}) (offset uint64, err error) {
 	offset = w.w.Count()
 
 	// Write type
-	if err = w.w.WriteByte(byte(Float)); err != nil {
-		return 0, err
+	if !w.excludeWriteType {
+		if err = w.w.WriteByte(byte(Float)); err != nil {
+			return 0, err
+		}
 	}
 
 	// Write value
@@ -202,8 +214,10 @@ func (w *Writer) writeString(s string) (offset uint64, err error) {
 	offset = w.w.Count()
 
 	// Write type
-	if err = w.w.WriteByte(byte(String)); err != nil {
-		return 0, err
+	if !w.excludeWriteType {
+		if err = w.w.WriteByte(byte(String)); err != nil {
+			return 0, err
+		}
 	}
 
 	// Write string
@@ -217,8 +231,10 @@ func (w *Writer) writeStringSlice(s []string) (offset uint64, err error) {
 	offset = w.w.Count()
 
 	// Write type
-	if err = w.w.WriteByte(byte(StringSlice)); err != nil {
-		return 0, err
+	if !w.excludeWriteType {
+		if err = w.w.WriteByte(byte(StringSlice)); err != nil {
+			return 0, err
+		}
 	}
 
 	// Write length of strings
@@ -244,8 +260,10 @@ func (w *Writer) writeBoolean(b bool) (offset uint64, err error) {
 	offset = w.w.Count()
 
 	// Write type
-	if err = w.w.WriteByte(byte(Boolean)); err != nil {
-		return 0, err
+	if !w.excludeWriteType {
+		if err = w.w.WriteByte(byte(Boolean)); err != nil {
+			return 0, err
+		}
 	}
 
 	// Write value
@@ -265,8 +283,10 @@ func (w *Writer) writeBytes(b []byte) (offset uint64, err error) {
 	offset = w.w.Count()
 
 	// Write type
-	if err = w.w.WriteByte(byte(Bytes)); err != nil {
-		return 0, err
+	if !w.excludeWriteType {
+		if err = w.w.WriteByte(byte(Bytes)); err != nil {
+			return 0, err
+		}
 	}
 
 	// Write bytes

@@ -127,19 +127,24 @@ func (r *Reader) Read(expectedType DataType) (interface{}, DataType, error) {
 		return nil, 0, fmt.Errorf("expected data type mismatch: wanted '%s', got '%s'", expectedType, DataType(t))
 	}
 
-	switch DataType(t) {
-	case Integer:
-		return r.readInt()
-	case UnsignedInteger:
-		return r.readUint()
-	default:
-		panic(fmt.Errorf("cannot read value, unknown data type '%v'", t))
-	}
+	return r.ReadGivenType(DataType(t))
 }
 
 // ReadRaw reads data into out and returns the number of bytes read into out.
 func (r *Reader) ReadRaw(out []byte) (n int, err error) {
 	return r.r.Read(out)
+}
+
+// ReadGivenType will read the next value given the type.
+func (r *Reader) ReadGivenType(givenType DataType) (interface{}, DataType, error) {
+	switch givenType {
+	case Integer:
+		return r.readInt()
+	case UnsignedInteger:
+		return r.readUint()
+	default:
+		panic(fmt.Errorf("cannot read value, unknown data type '%v'", givenType))
+	}
 }
 
 // ReadCompressedBlock will read the next block and decompress it into out.
