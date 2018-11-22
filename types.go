@@ -12,9 +12,11 @@ const (
 	Integer
 	UnsignedInteger
 	Float
+	Byte
 	Bytes
 	String
 	StringSlice
+	KeyValueMap
 )
 
 var dataTypeStrings = map[DataType]string{
@@ -23,7 +25,9 @@ var dataTypeStrings = map[DataType]string{
 	Integer:         "int",
 	UnsignedInteger: "uint",
 	Float:           "float",
+	Byte:            "byte",
 	Bytes:           "bytes",
 	String:          "string",
 	StringSlice:     "strings",
+	KeyValueMap:     "kvmap",
 }

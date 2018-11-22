@@ -17,7 +17,7 @@ type byteSeeker struct {
 
 func (b *byteSeeker) Read(p []byte) (n int, err error) {
 	from := b.offset
-	if from > int64(len(p)) {
+	if from >= int64(len(b.buf)) {
 		return 0, io.EOF
 	}
 
@@ -70,10 +70,28 @@ func (r *Reader) readByte() (byte, error) {
 	return b[0], err
 }
 
+func (r *Reader) readBytes(buf []byte) (err error) {
+	_, err = r.r.Read(buf)
+	return err
+}
+
+func (r *Reader) readString() (string, DataType, error) {
+	len, _, err := r.readUint()
+	if err != nil {
+		return "", String, err
+	}
+
+	str := make([]byte, len)
+	if err = r.readBytes(str); err != nil {
+		return "", String, err
+	}
+	return string(str), String, nil
+}
+
 func (r *Reader) readInt() (int64, DataType, error) {
 	b := make([]byte, binary.MaxVarintLen64)
 	n, err := r.r.Read(b)
-	if err != nil {
+	if err != io.EOF && err != nil {
 		return 0, Integer, err
 	}
 
@@ -96,7 +114,7 @@ func (r *Reader) readInt() (int64, DataType, error) {
 func (r *Reader) readUint() (uint64, DataType, error) {
 	b := make([]byte, binary.MaxVarintLen64)
 	n, err := r.r.Read(b)
-	if err != nil {
+	if err != io.EOF && err != nil {
 		return 0, UnsignedInteger, err
 	}
 
@@ -114,6 +132,34 @@ func (r *Reader) readUint() (uint64, DataType, error) {
 	} else {
 		return 0, UnsignedInteger, fmt.Errorf("overflow")
 	}
+}
+
+func (r *Reader) readKeyValueMap() (map[string]interface{}, DataType, error) {
+	m := make(map[string]interface{})
+
+	// Read length
+	len, _, err := r.readUint()
+	if err != nil {
+		return nil, KeyValueMap, err
+	}
+
+	for i := uint64(0); i < len; i++ {
+		// Read key
+		key, _, err := r.readString()
+		if err != nil {
+			return nil, KeyValueMap, err
+		}
+
+		// Read value
+		val, _, err := r.Read(Any)
+		if err != nil {
+			return nil, KeyValueMap, err
+		}
+
+		m[key] = val
+	}
+
+	return m, KeyValueMap, nil
 }
 
 // Read will read the next value out of the buffer.
@@ -138,10 +184,28 @@ func (r *Reader) ReadRaw(out []byte) (n int, err error) {
 // ReadGivenType will read the next value given the type.
 func (r *Reader) ReadGivenType(givenType DataType) (interface{}, DataType, error) {
 	switch givenType {
+	case Byte:
+		val, err := r.readByte()
+		return val, givenType, err
+	case Bytes:
+		len, _, err := r.readUint()
+		if err != nil {
+			return nil, Bytes, err
+		}
+		buf := make([]byte, len)
+		err = r.readBytes(buf)
+		return buf, Bytes, err
+	case String:
+		return r.readString()
 	case Integer:
 		return r.readInt()
 	case UnsignedInteger:
 		return r.readUint()
+	case Boolean:
+		val, err := r.readByte()
+		return val != 0, givenType, err
+	case KeyValueMap:
+		return r.readKeyValueMap()
 	default:
 		panic(fmt.Errorf("cannot read value, unknown data type '%v'", givenType))
 	}

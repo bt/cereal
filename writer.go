@@ -63,9 +63,9 @@ func (w *Writer) Write(data interface{}) (offset uint64, length int, err error) 
 	offset = w.w.Count()
 
 	switch vv := data.(type) {
-	case uint, uint8, uint32, uint64:
+	case uint, uint8, uint16, uint32, uint64:
 		offset, err = w.writeUint(uint64Value(vv))
-	case int, int8, int32, int64:
+	case int, int8, int16, int32, int64:
 		offset, err = w.writeInt(int64Value(vv))
 	case float32, float64:
 		offset, err = w.writeFloat(floatValue(vv))
@@ -77,6 +77,8 @@ func (w *Writer) Write(data interface{}) (offset uint64, length int, err error) 
 		offset, err = w.writeStringSlice(vv)
 	case bool:
 		offset, err = w.writeBoolean(vv)
+	case map[string]interface{}:
+		offset, err = w.writeKeyValueMap(vv)
 	default:
 		panic(fmt.Errorf("cannot write value, unknown data type for value: '%v' (type: %s)", vv, reflect.TypeOf(vv).String()))
 	}
@@ -253,6 +255,34 @@ func (w *Writer) writeStringSlice(s []string) (offset uint64, err error) {
 		}
 	}
 
+	return offset, nil
+}
+
+func (w *Writer) writeKeyValueMap(m map[string]interface{}) (offset uint64, err error) {
+	offset = w.w.Count()
+
+	// Write type
+	if !w.excludeWriteType {
+		if err = w.w.WriteByte(byte(KeyValueMap)); err != nil {
+			return 0, err
+		}
+	}
+	tmpExcludeWriteType := w.excludeWriteType
+
+	for k, v := range m {
+		w.excludeWriteType = true
+		if _, err = w.writeString(k); err != nil {
+			return 0, err
+		}
+
+		// Value type is unknown so requires type to be written
+		w.excludeWriteType = false
+		if _, _, err = w.Write(v); err != nil {
+			return 0, err
+		}
+	}
+
+	w.excludeWriteType = tmpExcludeWriteType
 	return offset, nil
 }
 
