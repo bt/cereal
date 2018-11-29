@@ -56,6 +56,15 @@ func TestReader_Read(t *testing.T) {
 				endOffset: 4,
 			},
 		},
+		{
+			name: "float",
+			buf:  []byte{0x04, 0x40, 0x09, 0x21, 0xca, 0xc0, 0x83, 0x12, 0x6f},
+			expected: expected{
+				val:       float64(3.1415),
+				dataType:  Float,
+				endOffset: 9,
+			},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

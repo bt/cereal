@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"math"
 	"os"
 
 	"github.com/pierrec/lz4"
@@ -134,6 +135,17 @@ func (r *Reader) readUint() (uint64, DataType, error) {
 	}
 }
 
+func (r *Reader) readFloat() (float64, DataType, error) {
+	b := make([]byte, 8)
+	_, err := r.r.Read(b)
+	if err != io.EOF && err != nil {
+		return 0, Float, err
+	}
+
+	dataBits := binary.BigEndian.Uint64(b)
+	return math.Float64frombits(dataBits), Float, nil
+}
+
 func (r *Reader) readKeyValueMap() (map[string]interface{}, DataType, error) {
 	m := make(map[string]interface{})
 
@@ -201,6 +213,8 @@ func (r *Reader) ReadGivenType(givenType DataType) (interface{}, DataType, error
 		return r.readInt()
 	case UnsignedInteger:
 		return r.readUint()
+	case Float:
+		return r.readFloat()
 	case Boolean:
 		val, err := r.readByte()
 		return val != 0, givenType, err

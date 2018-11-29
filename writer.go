@@ -267,8 +267,18 @@ func (w *Writer) writeKeyValueMap(m map[string]interface{}) (offset uint64, err 
 			return 0, err
 		}
 	}
-	tmpExcludeWriteType := w.excludeWriteType
 
+	// Save current setting of excludeWriteType
+	tmpExcludeWriteType := w.excludeWriteType
+	defer func() { w.excludeWriteType = tmpExcludeWriteType }()
+
+	// Write length
+	w.excludeWriteType = true
+	if _, err = w.writeUint(uint64(len(m))); err != nil {
+		return 0, err
+	}
+
+	// Write key-values
 	for k, v := range m {
 		w.excludeWriteType = true
 		if _, err = w.writeString(k); err != nil {
@@ -282,7 +292,6 @@ func (w *Writer) writeKeyValueMap(m map[string]interface{}) (offset uint64, err 
 		}
 	}
 
-	w.excludeWriteType = tmpExcludeWriteType
 	return offset, nil
 }
 
