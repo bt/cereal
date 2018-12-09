@@ -209,6 +209,20 @@ func (r *Reader) ReadGivenType(givenType DataType) (interface{}, DataType, error
 		return buf, Bytes, err
 	case String:
 		return r.readString()
+	case StringSlice:
+		lenStrings, _, err := r.readUint()
+		if err != nil {
+			return nil, StringSlice, err
+		}
+		sslice := make([]string, lenStrings)
+		for i := uint64(0); i < lenStrings; i++ {
+			s, _, err := r.readString()
+			if err != nil {
+				return nil, StringSlice, err
+			}
+			sslice = append(sslice, s)
+		}
+		return sslice, StringSlice, err
 	case Integer:
 		return r.readInt()
 	case UnsignedInteger:
