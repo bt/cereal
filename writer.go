@@ -7,6 +7,7 @@ import (
 	"hash/crc32"
 	"io"
 	"os"
+	"sort"
 	"reflect"
 
 	"github.com/pierrec/lz4"
@@ -290,13 +291,13 @@ func (w *Writer) writeKeyValueMap(m map[string]interface{}) (offset uint64, err 
 	// Write key-values
 	for _, k := range keys {
 		w.excludeWriteType = true
-		if _, err = w.writeString(m[k]); err != nil {
+		if _, err = w.writeString(k); err != nil {
 			return 0, err
 		}
 
 		// Value type is unknown so requires type to be written
 		w.excludeWriteType = false
-		if _, _, err = w.Write(v); err != nil {
+		if _, _, err = w.Write(m[k]); err != nil {
 			return 0, err
 		}
 	}
