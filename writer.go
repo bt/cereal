@@ -278,10 +278,19 @@ func (w *Writer) writeKeyValueMap(m map[string]interface{}) (offset uint64, err 
 		return 0, err
 	}
 
+	// Sort the fields alphabetically before writing
+	keys := make([]string, len(m))
+	i := 0
+	for k := range m {
+		keys[i] = k
+		i++
+	}
+	sort.Strings(keys)
+
 	// Write key-values
-	for k, v := range m {
+	for _, k := range keys {
 		w.excludeWriteType = true
-		if _, err = w.writeString(k); err != nil {
+		if _, err = w.writeString(m[k]); err != nil {
 			return 0, err
 		}
 
