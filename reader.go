@@ -220,7 +220,7 @@ func (r *Reader) ReadGivenType(givenType DataType) (interface{}, DataType, error
 			if err != nil {
 				return nil, StringSlice, err
 			}
-			sslice = append(sslice, s)
+			sslice[i] = s
 		}
 		return sslice, StringSlice, err
 	case Integer:
